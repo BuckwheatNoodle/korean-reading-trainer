@@ -15,7 +15,7 @@ export interface Passage {
   title: string;
   titleKo: string;
   topic: string;
-  level: "1–2級";
+  level: "1–2級" | "2–3級" | "3–4級";
   text: string;
   questions: Question[];
 }

@@ -146,8 +146,8 @@ describe("review prioritization", () => {
 });
 
 describe("passage dataset", () => {
-  it("contains at least the 12 starter passages with unique ordered IDs and valid questions", () => {
-    expect(passages.length).toBeGreaterThanOrEqual(12);
+  it("contains the starter and challenge passages with unique ordered IDs and valid questions", () => {
+    expect(passages.length).toBeGreaterThanOrEqual(18);
     const ids = new Set<string>();
     const questionIds = new Set<string>();
     for (const [index, passage] of passages.entries()) {
@@ -157,8 +157,15 @@ describe("passage dataset", () => {
       expect(passage.title.trim()).not.toBe("");
       expect(passage.titleKo.trim()).not.toBe("");
       expect(passage.topic.trim()).not.toBe("");
-      expect(countEojeol(passage.text)).toBeGreaterThanOrEqual(80);
-      expect(countEojeol(passage.text)).toBeLessThanOrEqual(110);
+      expect(["1–2級", "2–3級", "3–4級"]).toContain(passage.level);
+      const wordCount = countEojeol(passage.text);
+      if (passage.level === "1–2級") {
+        expect(wordCount).toBeGreaterThanOrEqual(80);
+        expect(wordCount).toBeLessThanOrEqual(110);
+      } else {
+        expect(wordCount).toBeGreaterThanOrEqual(110);
+        expect(wordCount).toBeLessThanOrEqual(190);
+      }
       expect(passage.questions).toHaveLength(2);
       const sentences = splitSentences(passage.text);
       expect(sentences.join(" ")).toBe(passage.text.trim().replace(/\s+/g, " "));
@@ -176,6 +183,13 @@ describe("passage dataset", () => {
         expect(sentences[question.evidenceSentence]).toBeTruthy();
       }
     }
+  });
+
+  it("offers a meaningful intermediate long-form set", () => {
+    const challenges = passages.filter((passage) => passage.level !== "1–2級");
+    expect(challenges.length).toBeGreaterThanOrEqual(6);
+    expect(challenges.every((passage) => countEojeol(passage.text) >= 110)).toBe(true);
+    expect(new Set(challenges.map((passage) => passage.topic)).size).toBe(challenges.length);
   });
 
   it("keeps the answer positions balanced as the dataset grows", () => {

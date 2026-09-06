@@ -7,6 +7,8 @@ import { Icon } from "./Icon";
 import { ZoneBar } from "./ZoneBar";
 
 const passages = passagesData as Passage[];
+const foundationPassages = passages.filter((passage) => passage.level === "1–2級");
+const challengePassages = passages.filter((passage) => passage.level !== "1–2級");
 
 interface HomeScreenProps {
   selectedPassageId: string;
@@ -153,11 +155,20 @@ export function HomeScreen({
             </div>
             <div className="passage-select-wrap">
               <select id="passage" value={passage.id} onChange={(event) => onSelectPassage(event.target.value)}>
-                {passages.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.order.toString().padStart(2, "0")} · {item.title} — {item.titleKo}
-                  </option>
-                ))}
+                <optgroup label="基礎・標準（1–2級）">
+                  {foundationPassages.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.order.toString().padStart(2, "0")} · {item.title} — {item.titleKo}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="中級・長文（2–4級）">
+                  {challengePassages.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.order.toString().padStart(2, "0")} · {item.title} — {item.titleKo}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
               <span className="select-chevron">⌄</span>
             </div>
