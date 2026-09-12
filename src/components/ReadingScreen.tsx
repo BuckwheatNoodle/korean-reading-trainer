@@ -14,6 +14,9 @@ interface ReadingScreenProps {
   onAbort: () => void;
 }
 
+/** Any status where the run is under way, so losing sight of the screen invalidates the measurement. */
+const ACTIVE_STATUSES = ["preparing", "running", "restarting"];
+
 export function ReadingScreen({
   passage,
   mode,
@@ -35,6 +38,7 @@ export function ReadingScreen({
   });
   const hasStarted = runner.status !== "idle";
   const currentNumber = runner.activeSentence >= 0 ? runner.activeSentence + 1 : 0;
+  const progressPercent = Math.round(runner.progress * 100);
 
   useEffect(() => {
     const paper = paperRef.current;
@@ -51,15 +55,20 @@ export function ReadingScreen({
       comfortMargin: Math.min(72, paper.clientHeight * 0.18),
     });
     if (target === null) return;
+    // The CSS scroll-behavior override for reduced motion does not reach an explicit JS behavior.
+    const reduceMotion = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     paper.scrollTo({
       top: Math.min(target, Math.max(0, paper.scrollHeight - paper.clientHeight)),
-      behavior: "smooth",
+      behavior: reduceMotion ? "auto" : "smooth",
     });
   }, [runner.activeSentence]);
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.hidden && runner.status === "running") {
+      // "running" alone leaves a hole: hiding the tab during TTS start-up or the fallback wait
+      // used to let the run finish in the background and record a passage nobody read.
+      if (document.hidden && ACTIVE_STATUSES.includes(runner.status)) {
         runner.cancel();
         setInterruptionNotice("画面が非表示になったため、この試行を中止しました。最初からやり直してください。");
       }
@@ -69,7 +78,7 @@ export function ReadingScreen({
   }, [runner.cancel, runner.status]);
 
   return (
-    <main className="page reading-page">
+    <main className="page reading-page" tabIndex={-1}>
       <div className="session-toolbar">
         <button type="button" className="quiet-button" onClick={() => { runner.cancel(); onAbort(); }}>
           <Icon name="close" size={17} /> 中止
@@ -81,7 +90,15 @@ export function ReadingScreen({
         <div className="session-timer">{formatDuration(runner.elapsedMs)}</div>
       </div>
 
-      <div className="reading-progress" aria-label={`読解進捗 ${Math.round(runner.progress * 100)}%`}>
+      <div
+        className="reading-progress"
+        role="progressbar"
+        aria-label="読解の進捗"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progressPercent}
+        aria-valuetext={`${progressPercent}%`}
+      >
         <span style={{ width: `${runner.progress * 100}%` }} />
       </div>
 
@@ -98,7 +115,7 @@ export function ReadingScreen({
           <div className="reading-start-panel">
             <span className="reading-start-panel__icon"><Icon name={mode === "audio" ? "headphones" : "eye"} size={28} /></span>
             <div>
-              <strong>{interruptionNotice ? "試行を再開できます" : mode === "audio" ? "音声とハイライトに合わせて読みます" : "ハイライトに合わせて読みます"}</strong>
+              <strong>{interruptionNotice ? "最初からやり直せます" : mode === "audio" ? "音声とハイライトに合わせて読みます" : "ハイライトに合わせて読みます"}</strong>
               <p>{interruptionNotice ?? "一語ずつ戻らず、色が移ったら次の文へ進んでください。"}</p>
             </div>
             <button type="button" className="primary-button" onClick={() => { setInterruptionNotice(null); runner.start(); }}>
@@ -107,7 +124,14 @@ export function ReadingScreen({
           </div>
         )}
 
-        <article ref={paperRef} className={`reading-paper ${hasStarted ? "is-running" : ""}`} lang="ko" aria-live="polite">
+        <article
+          ref={paperRef}
+          className={`reading-paper ${hasStarted ? "is-running" : ""}`}
+          lang="ko"
+          tabIndex={0}
+          role="region"
+          aria-label="本文"
+        >
           {sentences.map((sentence, index) => (
             <span
               key={`${passage.id}-${index}`}
@@ -119,16 +143,18 @@ export function ReadingScreen({
           ))}
         </article>
 
-        {runner.notice && (
-          <div className={`runner-notice ${runner.status === "restarting" ? "is-warning" : ""}`}>
-            <Icon name={runner.status === "preparing" ? "volume" : "info"} size={17} />
-            {runner.notice}
-          </div>
-        )}
+        <div role="status">
+          {runner.notice && (
+            <div className={`runner-notice ${runner.status === "restarting" ? "is-warning" : ""}`}>
+              <Icon name={runner.status === "preparing" ? "volume" : "info"} size={17} />
+              {runner.notice}
+            </div>
+          )}
 
-        {runner.status === "complete" && (
-          <div className="reading-complete"><Icon name="check" size={18} /> 読解完了。内容確認へ進みます…</div>
-        )}
+          {runner.status === "complete" && (
+            <div className="reading-complete"><Icon name="check" size={18} /> 読解完了。内容確認へ進みます…</div>
+          )}
+        </div>
 
         <p className="reading-hint">
           <Icon name="info" size={14} /> ハイライトは文単位です。前の文に戻らず、意味のまとまりを保って進みましょう。

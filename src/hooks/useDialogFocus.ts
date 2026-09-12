@@ -31,6 +31,10 @@ export function useDialogFocus(open: boolean, onClose: () => void) {
     queueMicrotask(() => (getFocusable()[0] ?? dialog).focus());
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // IME変換中の Escape は「変換の取り消し」であってダイアログを閉じる操作ではない。
+      // ここで拾うと、日本語を入力しかけたユーザーが入力内容ごと失う。
+      // isComposing を持たない古い実装のために keyCode 229 も見る。
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();

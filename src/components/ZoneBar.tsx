@@ -1,4 +1,4 @@
-import { PACE_ZONES } from "../lib/training";
+import { PACE_ZONES, getPaceZone } from "../lib/training";
 
 interface ZoneBarProps {
   pace?: number;
@@ -13,6 +13,14 @@ function position(value: number): number {
   return Math.min(100, Math.max(0, ((value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100));
 }
 
+/** The bar is the app's main visualisation, so it needs a spoken equivalent, not just tooltips. */
+function describe(pace?: number, baseline?: number): string {
+  const parts = [`到達域の目盛りは${SCALE_MIN}から${SCALE_MAX}語節/分です`];
+  if (pace !== undefined) parts.push(`訓練ペース ${pace.toFixed(1)}語節/分（${getPaceZone(pace).label}）`);
+  if (baseline !== undefined) parts.push(`無音実測 ${baseline.toFixed(1)}語節/分（${getPaceZone(baseline).label}）`);
+  return parts.join("。");
+}
+
 export function ZoneBar({ pace, baseline, compact = false }: ZoneBarProps) {
   const visibleZones = PACE_ZONES.map((zone) => ({
     ...zone,
@@ -21,7 +29,11 @@ export function ZoneBar({ pace, baseline, compact = false }: ZoneBarProps) {
   })).filter((zone) => zone.displayMax > zone.displayMin);
 
   return (
-    <div className={`zone-chart ${compact ? "zone-chart--compact" : ""}`}>
+    <div
+      className={`zone-chart ${compact ? "zone-chart--compact" : ""}`}
+      role="img"
+      aria-label={describe(pace, baseline)}
+    >
       <div className="zone-chart__labels" aria-hidden="true">
         {visibleZones.map((zone) => (
           <span
@@ -35,7 +47,7 @@ export function ZoneBar({ pace, baseline, compact = false }: ZoneBarProps) {
           </span>
         ))}
       </div>
-      <div className="zone-chart__track">
+      <div className="zone-chart__track" aria-hidden="true">
         {visibleZones.map((zone) => (
           <div
             key={zone.id}
@@ -47,20 +59,12 @@ export function ZoneBar({ pace, baseline, compact = false }: ZoneBarProps) {
           />
         ))}
         {baseline !== undefined && (
-          <div
-            className="zone-marker zone-marker--baseline"
-            style={{ left: `${position(baseline)}%` }}
-            title={`無音実測 ${baseline.toFixed(1)}`}
-          >
+          <div className="zone-marker zone-marker--baseline" style={{ left: `${position(baseline)}%` }}>
             <span>▲</span>
           </div>
         )}
         {pace !== undefined && (
-          <div
-            className="zone-marker zone-marker--pace"
-            style={{ left: `${position(pace)}%` }}
-            title={`今回 ${pace.toFixed(1)}`}
-          >
+          <div className="zone-marker zone-marker--pace" style={{ left: `${position(pace)}%` }}>
             <span>{pace.toFixed(0)}</span>
           </div>
         )}

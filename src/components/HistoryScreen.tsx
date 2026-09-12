@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import passagesData from "../data/passages.json";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import {
+  formatAnswerDuration,
   formatDate,
   formatDuration,
   getPaceZone,
@@ -97,14 +98,21 @@ export function HistoryScreen({
       : "練習結果と無音実測を記録すると、ここに現在地が表示されます。";
 
   function exportJson() {
-    const json = JSON.stringify(makeExportBundle(sessions, settings, baselineMeasurements), null, 2);
+    // Compact rather than pretty-printed: a formatted bundle inflates by ~40% and can cross the
+    // 2MB import ceiling, which would make the app refuse its own backup.
+    const json = JSON.stringify(makeExportBundle(sessions, settings, baselineMeasurements));
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = `topik-reading-log-${new Date().toISOString().slice(0, 10)}.json`;
+    // Safari needs the anchor in the document, and revoking the URL in the same tick can cancel
+    // the download before it starts.
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(anchor);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     setMessage(`学習${sessions.length}件・基準値${baselineMeasurements.length}件を書き出しました。`);
   }
 
@@ -132,7 +140,7 @@ export function HistoryScreen({
   }
 
   return (
-    <main className="page history-page">
+    <main className="page history-page" tabIndex={-1}>
       <section className="page-title-row">
         <div>
           <p className="section-kicker">YOUR PROGRESS</p>
@@ -151,10 +159,10 @@ export function HistoryScreen({
             }}
           />
           <button className="secondary-button" type="button" onClick={() => inputRef.current?.click()}>
-            <Icon name="upload" size={17} /> 読み込む
+            <Icon name="upload" size={17} /> バックアップを読み込む
           </button>
           <button className="secondary-button" type="button" onClick={exportJson}>
-            <Icon name="download" size={17} /> バックアップ
+            <Icon name="download" size={17} /> バックアップを保存
           </button>
         </div>
       </section>
@@ -164,7 +172,7 @@ export function HistoryScreen({
       <section className="history-stats">
         <div className="stat-card card"><span>今週</span><strong>{weeklySessions}</strong><small>/ {settings.weeklyGoal}回</small></div>
         <div className="stat-card card"><span>理解度</span><strong>{Math.round(averageComprehension * 100)}</strong><small>%</small></div>
-        <div className="stat-card card"><span>安定ペース <em>直近の2/2</em></span><strong>{stablePace?.toFixed(1) ?? "—"}</strong><small>語節/分</small></div>
+        <div className="stat-card card"><span>安定ペース <em>2/2を保てた訓練負荷</em></span><strong>{stablePace?.toFixed(1) ?? "—"}</strong><small>語節/分</small></div>
         <div className="stat-card card"><span>次の目標</span><strong>{latest?.recommendedPace ?? settings.targetPace}</strong><small>語節/分</small></div>
       </section>
 
@@ -181,14 +189,24 @@ export function HistoryScreen({
               <div><p className="section-kicker">THIS WEEK</p><h2>{weeklySessions >= settings.weeklyGoal ? "今週の目標を達成しました" : `あと${settings.weeklyGoal - weeklySessions}回で今週の目標`}</h2></div>
               <strong>{weeklySessions} / {settings.weeklyGoal}</strong>
             </div>
-            <div className="weekly-progress" aria-label={`週間目標 ${Math.round(weeklyProgress)}%`}><span style={{ width: `${weeklyProgress}%` }} /></div>
+            <div
+              className="weekly-progress"
+              role="progressbar"
+              aria-label="週間目標の達成率"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(weeklyProgress)}
+              aria-valuetext={`${weeklySessions} / ${settings.weeklyGoal}回`}
+            >
+              <span style={{ width: `${weeklyProgress}%` }} />
+            </div>
             <button className="primary-button" type="button" onClick={onStart}>{sessions.length ? "今日の練習へ" : "最初の練習を始める"}<Icon name="arrow" size={17} /></button>
           </section>
 
           <section className="card history-position">
             <div className="section-heading section-heading--inline">
               <div><p className="section-kicker">CURRENT POSITION</p><h2>現在地</h2></div>
-              {baselineMeasurements.length > 0 && <div className="legend-inline"><span className="legend-triangle">▲</span> 無音実測 {settings.baselinePace.toFixed(1)}</div>}
+              {baselineMeasurements.length > 0 && <div className="legend-inline"><span className="legend-triangle" aria-hidden="true">▲</span> 無音実測 {settings.baselinePace.toFixed(1)}</div>}
             </div>
             <ZoneBar pace={latest?.measuredPace} baseline={baselineMeasurements.length ? settings.baselinePace : undefined} />
             <p className="history-position__note">{positionNote}</p>
@@ -214,7 +232,7 @@ export function HistoryScreen({
             {!recentSessions.length ? (
               <div className="compact-empty"><Icon name="chart" size={22} /><p>練習すると、ここに直近8回の推移が表示されます。</p></div>
             ) : (
-              <div className="pace-trend" aria-label="直近8回の実測ペース">
+              <div className="pace-trend" role="group" aria-label="直近8回の訓練ペースと理解度">
                 {recentSessions.map((session) => (
                   <div className="pace-trend__item" key={session.id}>
                     <strong>{session.measuredPace.toFixed(0)}</strong>
@@ -238,7 +256,17 @@ export function HistoryScreen({
                   return (
                     <article key={item.topic}>
                       <div className="weakness-list__label"><strong lang="ko">{item.topic}</strong><span>{item.passageTitles.join("・")} · {item.sessionCount}回</span></div>
-                      <div className="weakness-list__bar" aria-label={`${item.topic} 理解度 ${percent}%`}><span style={{ width: `${percent}%` }} /></div>
+                      <div
+                        className="weakness-list__bar"
+                        role="progressbar"
+                        aria-label={`${item.topic} の理解度`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={percent}
+                        aria-valuetext={`${percent}%`}
+                      >
+                        <span style={{ width: `${percent}%` }} />
+                      </div>
                       <strong className={percent < 100 ? "needs-work" : ""}>{percent}<small>%</small></strong>
                     </article>
                   );
@@ -267,7 +295,7 @@ export function HistoryScreen({
             <>
               <div className="session-table-wrap">
                 <table className="session-table">
-                <thead><tr><th>日時 / 文章</th><th>モード</th><th>目標</th><th>実測</th><th>理解</th><th>到達域</th><th>時間</th><th><span className="visually-hidden">操作</span></th></tr></thead>
+                <thead><tr><th>日時 / 文章</th><th>モード</th><th>目標</th><th>訓練</th><th>理解</th><th>到達域</th><th>読解</th><th>回答</th><th><span className="visually-hidden">操作</span></th></tr></thead>
                 <tbody>
                   {reversedSessions.map((session) => {
                     const zone = getPaceZone(session.measuredPace);
@@ -280,7 +308,13 @@ export function HistoryScreen({
                         <td><span className={session.correctCount === 2 ? "score-pass" : "score-low"}>{session.correctCount}/2</span></td>
                         <td><span className="zone-chip"><i style={{ background: zone.color }} />{zone.label}</span></td>
                         <td>{formatDuration(session.wallTimeMs)}</td>
-                        <td><button className="history-review-button" type="button" onClick={() => onReview(session)}>レビュー</button></td>
+                        <td>{session.quizTimeMs > 0 ? formatAnswerDuration(session.quizTimeMs) : "—"}</td>
+                        <td>
+                          <button className="history-review-button" type="button" onClick={() => onReview(session)}>レビュー</button>
+                          {session.correctCount < 2 && (
+                            <button className="history-review-button" type="button" onClick={() => onReview(session, true)}>誤答だけ</button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -295,9 +329,10 @@ export function HistoryScreen({
                       <div className="session-card__top"><span>{formatDate(session.completedAt)}</span><span className="zone-chip"><i style={{ background: zone.color }} />{zone.shortLabel}</span></div>
                       <h3>{session.passageTitle}</h3>
                       <div className="session-card__metrics">
-                        <span>実測 <strong>{session.measuredPace.toFixed(1)}</strong></span>
+                        <span>訓練 <strong>{session.measuredPace.toFixed(1)}</strong></span>
                         <span>目標 <strong>{session.targetPace}</strong></span>
                         <span>理解 <strong className={session.correctCount === 2 ? "score-pass" : "score-low"}>{session.correctCount}/2</strong></span>
+                        <span>回答 <strong>{session.quizTimeMs > 0 ? formatAnswerDuration(session.quizTimeMs) : "—"}</strong></span>
                       </div>
                       <div className="session-card__actions">
                         <button className="secondary-button" type="button" onClick={() => onReview(session)}>全体をレビュー</button>
@@ -316,16 +351,23 @@ export function HistoryScreen({
         <section className="history-list card">
           <div className="section-heading section-heading--inline">
             <div><p className="section-kicker">SILENT BASELINE</p><h2>無音実測の履歴</h2></div>
-            <span className="history-count">ホームから追加できます</span>
+            <span className="history-count">ホームの「実測する」から追加できます</span>
           </div>
           {!baselineMeasurements.length ? (
-            <div className="compact-empty"><Icon name="target" size={22} /><p>基準値を記録すると、訓練負荷と実力値を分けて追えます。</p></div>
+            <div className="compact-empty"><Icon name="target" size={22} /><p>ホームの「実測する」で無音のまま1本読むと、訓練負荷と実力値を分けて追えます。</p></div>
           ) : (
             <div className="baseline-history-list">
               {[...baselineMeasurements].reverse().map((item, index) => (
                 <article key={item.id}>
                   <span className="baseline-history-list__marker" />
-                  <div><small>{formatMeasurementDate(item.measuredAt)}{index === 0 ? " · 最新" : ""}</small><strong>{item.pace.toFixed(1)} <em>語節/分</em></strong>{item.note && <p>{item.note}</p>}</div>
+                  <div>
+                    <small>{formatMeasurementDate(item.measuredAt)}{index === 0 ? " · 最新" : ""}</small>
+                    <strong>{item.pace.toFixed(1)} <em>語節/分</em></strong>
+                    {item.note && <p>{item.note}</p>}
+                    {item.quizTimeMs !== undefined && item.quizTimeMs > 0 && (
+                      <p>回答 {formatAnswerDuration(item.quizTimeMs)}{item.quizTargetTimeMs ? ` / 目安 ${formatAnswerDuration(item.quizTargetTimeMs)}` : ""}</p>
+                    )}
+                  </div>
                   <span className="zone-chip"><i style={{ background: getPaceZone(item.pace).color }} />{getPaceZone(item.pace).label}</span>
                 </article>
               ))}

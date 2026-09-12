@@ -15,7 +15,7 @@ export function Header({ screen, sessionCount, onNavigate, immersive = false }: 
       <div className="app-header__inner">
         <button className="brand" type="button" onClick={() => !immersive && onNavigate("home")} aria-label={immersive ? "読解中" : "ホームへ"} disabled={immersive}>
           <span className="brand__mark"><Icon name="book" size={20} /></span>
-          <span className="brand__name">읽기 <strong>Pace</strong></span>
+          <span className="brand__name"><span lang="ko">읽기</span> <strong>Pace</strong></span>
           <span className="brand__tag">TOPIK II</span>
         </button>
         {!immersive && <nav className="main-nav" aria-label="メインナビゲーション">

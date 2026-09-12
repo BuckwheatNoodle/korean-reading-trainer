@@ -6,6 +6,8 @@ export interface Question {
   choices: string[];
   answer: number;
   evidenceSentence: number;
+  /** Sentence indexes needed to judge synthesis questions. The primary index remains for compatibility. */
+  evidenceSentences?: number[];
   explanation: string;
 }
 
@@ -23,6 +25,8 @@ export interface Passage {
 export interface PassageTranslation {
   passageId: string;
   sentences: string[];
+  /** Japanese rendering of each question's explanation, keyed by question id. */
+  explanations?: Record<string, string>;
 }
 
 export interface BaselineMeasurement {
@@ -30,6 +34,8 @@ export interface BaselineMeasurement {
   pace: number;
   measuredAt: string;
   note?: string;
+  quizTimeMs?: number;
+  quizTargetTimeMs?: number;
 }
 
 export interface PaceZone {
@@ -54,6 +60,12 @@ export interface ReadingMeasurement {
   fallbackReason?: string;
 }
 
+export interface QuizTiming {
+  totalTimeMs: number;
+  questionTimeMs: number[];
+  targetTimeMs: number;
+}
+
 export interface TrainingSession extends ReadingMeasurement {
   id: string;
   passageId: string;
@@ -63,6 +75,9 @@ export interface TrainingSession extends ReadingMeasurement {
   wordCount: number;
   correctCount: number;
   answers: number[];
+  quizTimeMs: number;
+  questionTimeMs: number[];
+  quizTargetTimeMs: number;
   zoneId: PaceZone["id"];
   recommendedPace: number;
   completedAt: string;
